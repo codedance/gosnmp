@@ -20,11 +20,18 @@ import (
 	"strings"
 )
 
+// variable struct is used by decodeValue(), which is used for debugging
+type variable struct {
+	Name  []int
+	Type  Asn1BER
+	Value interface{}
+}
+
 // -- helper functions (mostly) in alphabetical order --------------------------
 
-func decodeValue(data []byte, msg string) (retVal *Variable, err error) {
+func decodeValue(data []byte, msg string) (retVal *variable, err error) {
 	dumpBytes1(data, fmt.Sprintf("decodeValue: %s", msg), 16)
-	retVal = new(Variable)
+	retVal = new(variable)
 
 	switch Asn1BER(data[0]) {
 
@@ -71,10 +78,10 @@ func decodeValue(data []byte, msg string) (retVal *Variable, err error) {
 		}
 		retVal.Type = ObjectIdentifier
 		retVal.Value = oidToString(oid)
-	case IpAddress:
+	case IPAddress:
 		// 0x40
-		slog.Print("decodeValue: type is IpAddress")
-		retVal.Type = IpAddress
+		slog.Print("decodeValue: type is IPAddress")
+		retVal.Type = IPAddress
 		switch data[1] {
 		case 4: // IPv4
 			if len(data) < 6 {
@@ -246,14 +253,14 @@ func marshalLength(length int) ([]byte, error) {
 		return nil, err
 	}
 
-	buf_bytes, err2 := buf.ReadBytes(0) // can't use buf.Bytes() - trailing 00's
+	bufBytes, err2 := buf.ReadBytes(0) // can't use buf.Bytes() - trailing 00's
 	if err2 != nil {
 		return nil, err
 	}
-	buf_bytes = buf_bytes[0 : len(buf_bytes)-1] // remove trailing 00
+	bufBytes = bufBytes[0 : len(bufBytes)-1] // remove trailing 00
 
-	header := []byte{byte(128 | len(buf_bytes))}
-	return append(header, buf_bytes...), nil
+	header := []byte{byte(128 | len(bufBytes))}
+	return append(header, bufBytes...), nil
 }
 
 func marshalObjectIdentifier(oid []int) (ret []byte, err error) {
@@ -401,13 +408,13 @@ func parseLength(bytes []byte) (length int, cursor int) {
 		length += 2
 		cursor += 2
 	} else {
-		num_octets := int(bytes[1]) & 127
-		for i := 0; i < num_octets; i++ {
+		numOctets := int(bytes[1]) & 127
+		for i := 0; i < numOctets; i++ {
 			length <<= 8
 			length += int(bytes[2+i])
 		}
-		length += 2 + num_octets
-		cursor += 2 + num_octets
+		length += 2 + numOctets
+		cursor += 2 + numOctets
 	}
 	return length, cursor
 }
@@ -447,11 +454,11 @@ func parseRawField(data []byte, msg string) (interface{}, int, error) {
 	switch Asn1BER(data[0]) {
 	case Integer:
 		length, cursor := parseLength(data)
-		if i, err := parseInt(data[cursor:length]); err != nil {
+		i, err := parseInt(data[cursor:length])
+		if err != nil {
 			return nil, 0, fmt.Errorf("Unable to parse raw INTEGER: %x err: %v", data, err)
-		} else {
-			return i, length, nil
 		}
+		return i, length, nil
 	case OctetString:
 		length, cursor := parseLength(data)
 		return string(data[cursor:length]), length, nil

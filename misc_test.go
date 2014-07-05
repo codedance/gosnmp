@@ -26,13 +26,13 @@ var testsMarshalLength = []struct {
 
 func TestMarshalLength(t *testing.T) {
 	for i, test := range testsMarshalLength {
-		test_bytes, err := marshalLength(test.length)
+		testBytes, err := marshalLength(test.length)
 		if err != nil {
 			t.Errorf("%d: length %d got err %v", i, test.length, err)
 		}
-		if !reflect.DeepEqual(test_bytes, test.expected) {
+		if !reflect.DeepEqual(testBytes, test.expected) {
 			t.Errorf("%d: length %d got |%x| expected |%x|",
-				i, test.length, test_bytes, test.expected)
+				i, test.length, testBytes, test.expected)
 		}
 	}
 }
@@ -40,9 +40,9 @@ func TestMarshalLength(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 var testsPartition = []struct {
-	current_position int
-	partition_size   int
-	slice_length     int
+	currentPosition int
+	partitionSize   int
+	sliceLength      int
 	ok               bool
 }{
 	{-1, 3, 8, false}, // test out of range
@@ -64,7 +64,7 @@ var testsPartition = []struct {
 
 func TestPartition(t *testing.T) {
 	for i, test := range testsPartition {
-		ok := Partition(test.current_position, test.partition_size, test.slice_length)
+		ok := Partition(test.currentPosition, test.partitionSize, test.sliceLength)
 		if ok != test.ok {
 			t.Errorf("#%d: Bad result: %v (expected %v)", i, ok, test.ok)
 		}
