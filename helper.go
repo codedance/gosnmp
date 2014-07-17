@@ -1,6 +1,6 @@
-// Copyright 2012 Andreas Louca, 2013 Sonia Hamilton. All rights reserved.  Use
-// of this source code is governed by a BSD-style license that can be found in
-// the LICENSE file.
+// Copyright 2012-2014 The GoSNMP Authors. All rights reserved.  Use of this
+// source code is governed by a BSD-style license that can be found in the
+// LICENSE file.
 
 // Copyright 2009 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
@@ -11,6 +11,7 @@ package gosnmp
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
@@ -30,26 +31,34 @@ type variable struct {
 // -- helper functions (mostly) in alphabetical order --------------------------
 
 func decodeValue(data []byte, msg string) (retVal *variable, err error) {
-	dumpBytes1(data, fmt.Sprintf("decodeValue: %s", msg), 16)
+	if LoggingDisabled != true {
+		dumpBytes1(data, fmt.Sprintf("decodeValue: %s", msg), 16)
+	}
 	retVal = new(variable)
 
 	switch Asn1BER(data[0]) {
 
 	case Integer:
 		// 0x02. signed
-		slog.Print("decodeValue: type is Integer")
+		if LoggingDisabled != true {
+			slog.Print("decodeValue: type is Integer")
+		}
 		length, cursor := parseLength(data)
 		var ret int
 		var err error
 		if ret, err = parseInt(data[cursor:length]); err != nil {
-			slog.Printf("%v:", err)
+			if LoggingDisabled != true {
+				slog.Printf("%v:", err)
+			}
 			return retVal, fmt.Errorf("bytes: % x err: %v", data, err)
 		}
 		retVal.Type = Integer
 		retVal.Value = ret
 	case OctetString:
 		// 0x04
-		slog.Print("decodeValue: type is OctetString")
+		if LoggingDisabled != true {
+			slog.Print("decodeValue: type is OctetString")
+		}
 		length, cursor := parseLength(data)
 		retVal.Type = OctetString
 		if data[cursor] == 0 && length == 2 {
@@ -61,12 +70,16 @@ func decodeValue(data []byte, msg string) (retVal *variable, err error) {
 		}
 	case Null:
 		// 0x05
-		slog.Print("decodeValue: type is Null")
+		if LoggingDisabled != true {
+			slog.Print("decodeValue: type is Null")
+		}
 		retVal.Type = Null
 		retVal.Value = nil
 	case ObjectIdentifier:
 		// 0x06
-		slog.Print("decodeValue: type is ObjectIdentifier")
+		if LoggingDisabled != true {
+			slog.Print("decodeValue: type is ObjectIdentifier")
+		}
 		rawOid, _, err := parseRawField(data, "OID")
 		if err != nil {
 			return nil, fmt.Errorf("Error parsing OID Value: %s", err.Error())
@@ -80,7 +93,9 @@ func decodeValue(data []byte, msg string) (retVal *variable, err error) {
 		retVal.Value = oidToString(oid)
 	case IPAddress:
 		// 0x40
-		slog.Print("decodeValue: type is IPAddress")
+		if LoggingDisabled != true {
+			slog.Print("decodeValue: type is IPAddress")
+		}
 		retVal.Type = IPAddress
 		switch data[1] {
 		case 4: // IPv4
@@ -100,88 +115,140 @@ func decodeValue(data []byte, msg string) (retVal *variable, err error) {
 		}
 	case Counter32:
 		// 0x41. unsigned
-		slog.Print("decodeValue: type is Counter32")
+		if LoggingDisabled != true {
+			slog.Print("decodeValue: type is Counter32")
+		}
 		length, cursor := parseLength(data)
 		ret, err := parseUint(data[cursor:length])
 		if err != nil {
-			slog.Printf("decodeValue: err is %v", err)
+			if LoggingDisabled != true {
+				slog.Printf("decodeValue: err is %v", err)
+			}
 			break
 		}
 		retVal.Type = Counter32
 		retVal.Value = ret
 	case Gauge32:
 		// 0x42. unsigned
-		slog.Print("decodeValue: type is Gauge32")
+		if LoggingDisabled != true {
+			slog.Print("decodeValue: type is Gauge32")
+		}
 		length, cursor := parseLength(data)
 		ret, err := parseUint(data[cursor:length])
 		if err != nil {
-			slog.Printf("decodeValue: err is %v", err)
+			if LoggingDisabled != true {
+				slog.Printf("decodeValue: err is %v", err)
+			}
 			break
 		}
 		retVal.Type = Gauge32
 		retVal.Value = ret
 	case TimeTicks:
 		// 0x43
-		slog.Print("decodeValue: type is TimeTicks")
+		if LoggingDisabled != true {
+			slog.Print("decodeValue: type is TimeTicks")
+		}
 		length, cursor := parseLength(data)
 		ret, err := parseInt(data[cursor:length])
 		if err != nil {
-			slog.Printf("decodeValue: err is %v", err)
+			if LoggingDisabled != true {
+				slog.Printf("decodeValue: err is %v", err)
+			}
 			break
 		}
 		retVal.Type = TimeTicks
 		retVal.Value = ret
 	case Counter64:
 		// 0x46
-		slog.Print("decodeValue: type is Counter64")
+		if LoggingDisabled != true {
+			slog.Print("decodeValue: type is Counter64")
+		}
 		length, cursor := parseLength(data)
 		ret, err := parseInt64(data[cursor:length])
 		if err != nil {
-			slog.Printf("decodeValue: err is %v", err)
+			if LoggingDisabled != true {
+				slog.Printf("decodeValue: err is %v", err)
+			}
 			break
 		}
 		retVal.Type = Counter64
 		retVal.Value = ret
 	case NoSuchObject:
 		// 0x80
-		slog.Print("decodeValue: type is NoSuchObject")
+		if LoggingDisabled != true {
+			slog.Print("decodeValue: type is NoSuchObject")
+		}
 		retVal.Type = NoSuchObject
 		retVal.Value = nil
 	case NoSuchInstance:
 		// 0x81
-		slog.Print("decodeValue: type is NoSuchInstance")
+		if LoggingDisabled != true {
+			slog.Print("decodeValue: type is NoSuchInstance")
+		}
 		retVal.Type = NoSuchInstance
 		retVal.Value = nil
 	case EndOfMibView:
 		// 0x82
-		slog.Print("decodeValue: type is EndOfMibView")
+		if LoggingDisabled != true {
+			slog.Print("decodeValue: type is EndOfMibView")
+		}
 		retVal.Type = EndOfMibView
 		retVal.Value = nil
 	default:
-		slog.Print("decodeValue: type %x isn't implemented", data[0])
+		if LoggingDisabled != true {
+			slog.Print("decodeValue: type %x isn't implemented", data[0])
+		}
 		retVal.Type = UnknownType
 		retVal.Value = nil
 	}
-
-	slog.Printf("decodeValue: value is %#v", retVal.Value)
+	if LoggingDisabled != true {
+		slog.Printf("decodeValue: value is %#v", retVal.Value)
+	}
 	return
 }
 
 // dump bytes in a format similar to Wireshark
 func dumpBytes1(data []byte, msg string, maxlength int) {
-	for i, b := range data {
-		if i >= maxlength {
-			break
-		}
-		if (i % 8) == 0 {
-			msg += "\n"
-			msg += fmt.Sprintf("%3d ", i)
-		} else if i == 0 {
-			msg += fmt.Sprintf("%3d ", 0)
-		}
-		msg += fmt.Sprintf(" %02x", b)
+	var buffer bytes.Buffer
+	buffer.WriteString(msg)
+	length := maxlength
+	if len(data) < maxlength {
+		length = len(data)
 	}
-	slog.Print(msg)
+	length *= 2 //One Byte Symobls Two Hex
+	hexStr := hex.EncodeToString(data)
+	for i := 0; length >= i+16; i += 16 {
+		buffer.WriteString("\n")
+		buffer.WriteString(strconv.Itoa(i / 2))
+		buffer.WriteString("\t")
+		buffer.WriteString(hexStr[i : i+2])
+		buffer.WriteString(" ")
+		buffer.WriteString(hexStr[i+2 : i+4])
+		buffer.WriteString(" ")
+		buffer.WriteString(hexStr[i+4 : i+6])
+		buffer.WriteString(" ")
+		buffer.WriteString(hexStr[i+6 : i+8])
+		buffer.WriteString(" ")
+		buffer.WriteString(hexStr[i+8 : i+10])
+		buffer.WriteString(" ")
+		buffer.WriteString(hexStr[i+10 : i+12])
+		buffer.WriteString(" ")
+		buffer.WriteString(hexStr[i+12 : i+14])
+		buffer.WriteString(" ")
+		buffer.WriteString(hexStr[i+14 : i+16])
+	}
+	leftOver := length % 16
+	if leftOver != 0 {
+		buffer.WriteString("\n")
+		buffer.WriteString(strconv.Itoa((length - leftOver) / 2))
+		buffer.WriteString("\t")
+		for i := 0; leftOver >= i+2; i += 2 {
+			buffer.WriteString(hexStr[i : i+2])
+			buffer.WriteString(" ")
+		}
+	}
+	buffer.WriteString("\n")
+	slog.Print(buffer.String())
 }
 
 // dump bytes in one row, up to about screen width. Returns a string
@@ -310,10 +377,11 @@ func marshalOID(oid string) ([]byte, error) {
 }
 
 func oidToString(oid []int) (ret string) {
-	for _, i := range oid {
-		ret = ret + fmt.Sprintf(".%d", i)
+	values := make([]interface{}, len(oid))
+	for i, v := range oid {
+		values[i] = v
 	}
-	return ret[1:]
+	return fmt.Sprintf(strings.Repeat(".%d", len(oid)), values...)
 }
 
 // parseBase128Int parses a base-128 encoded int from the given offset in the

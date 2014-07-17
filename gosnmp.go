@@ -1,6 +1,6 @@
-// Copyright 2012 Andreas Louca, 2013 Sonia Hamilton, 2014 Chris Dance.
-// All rights reserved.  Use of this source code is governed by a
-// BSD-style license that can be found in the LICENSE file.
+// Copyright 2012-2014 The GoSNMP Authors. All rights reserved.  Use of this
+// source code is governed by a BSD-style license that can be found in the
+// LICENSE file.
 
 // Copyright 2009 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
@@ -22,7 +22,7 @@ const (
 	maxOids = 60
 
 	// Base OID for MIB-2 defined SNMP variables
-	baseOid = "1.3.6.1.2.1"
+	baseOid = ".1.3.6.1.2.1"
 
 	// Java SNMP uses 50, snmp-net uses 10
 	defaultMaxRepetitions = 50
@@ -30,6 +30,9 @@ const (
 	// TODO comment
 	defaultNonRepeaters = 0
 )
+
+// LoggingDisabled is set if the Logger is nil, short circuits any 'slog' calls
+var LoggingDisabled bool
 
 // GoSNMP represents GoSNMP library state
 type GoSNMP struct {
@@ -77,7 +80,7 @@ var Default = &GoSNMP{
 // SnmpPDU will be used when doing SNMP Set's
 type SnmpPDU struct {
 
-	// Name is an oid in string format eg "1.3.6.1.4.9.27"
+	// Name is an oid in string format eg ".1.3.6.1.4.9.27"
 	Name string
 
 	// The type of the value eg Integer
@@ -120,6 +123,9 @@ const (
 
 // Connect initiates a connection to the target host
 func (x *GoSNMP) Connect() error {
+	if x.Logger == nil {
+		LoggingDisabled = true
+	}
 	Conn, err := net.DialTimeout("udp", fmt.Sprintf("%s:%d", x.Target, x.Port), x.Timeout)
 	if err == nil {
 		x.Conn = Conn
