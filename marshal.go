@@ -381,7 +381,7 @@ func unmarshal(packet []byte) (*SnmpPacket, error) {
 			return nil, fmt.Errorf("Error in unmarshalResponse: %s", err.Error())
 		}
 	default:
-		return nil, fmt.Errorf("Unknown PDUType %#x")
+		return nil, fmt.Errorf("Unknown PDUType %#x", requestType)
 	}
 	return response, nil
 }
@@ -506,8 +506,9 @@ func unmarshalVBL(packet []byte, response *SnmpPacket,
 		if oid, ok = rawOid.([]int); !ok {
 			return nil, fmt.Errorf("unable to type assert rawOid |%v| to []int", rawOid)
 		}
+		oidStr := oidToString(oid)
 		if LoggingDisabled != true {
-			slog.Printf("OID: %s", oidToString(oid))
+			slog.Printf("OID: %s", oidStr)
 		}
 
 		// Parse Value
@@ -517,7 +518,7 @@ func unmarshalVBL(packet []byte, response *SnmpPacket,
 		}
 		valueLength, _ := parseLength(packet[cursor:])
 		cursor += valueLength
-		response.Variables = append(response.Variables, SnmpPDU{oidToString(oid), v.Type, v.Value})
+		response.Variables = append(response.Variables, SnmpPDU{oidStr, v.Type, v.Value})
 	}
 	return response, nil
 }
