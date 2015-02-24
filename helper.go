@@ -288,6 +288,21 @@ func marshalBase128Int(out *bytes.Buffer, n int64) (err error) {
 	return nil
 }
 
+// marshalInt16 builds a byte representation of
+// a 16 bit int in BigEndian form.
+// TODO add an error return, like other marshals
+func marshalInt16(value int) (rs []byte) {
+	if value <= 0xff {
+		rs = []byte{byte(value)}
+		return
+	}
+	if value > 0xff && value <= 0xffff {
+		rs = []byte{byte(((value >> 8) & 0xff)), byte((value & 0xff))}
+		return
+	}
+	return
+}
+
 // marshalLength builds a byte representation of length
 //
 // http://luca.ntop.org/Teaching/Appunti/asn1.html
@@ -300,7 +315,6 @@ func marshalBase128Int(out *bytes.Buffer, n int64) (err error) {
 //   7-1 give the number of additional length octets. Second and following
 //   octets give the length, base 256, most significant digit first.
 func marshalLength(length int) ([]byte, error) {
-
 	// more convenient to pass length as int than uint64. Therefore check < 0
 	if length < 0 {
 		return nil, fmt.Errorf("length must be greater than zero")
@@ -309,16 +323,19 @@ func marshalLength(length int) ([]byte, error) {
 	}
 
 	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.LittleEndian, uint64(length))
+	err := binary.Write(buf, binary.BigEndian, uint64(length))
 	if err != nil {
 		return nil, err
 	}
+	bufBytes := buf.Bytes()
 
-	bufBytes, err2 := buf.ReadBytes(0) // can't use buf.Bytes() - trailing 00's
-	if err2 != nil {
-		return nil, err
+	// strip leading zeros
+	for idx, octect := range bufBytes {
+		if octect != 00 {
+			bufBytes = bufBytes[idx:len(bufBytes)]
+			break
+		}
 	}
-	bufBytes = bufBytes[0 : len(bufBytes)-1] // remove trailing 00
 
 	header := []byte{byte(128 | len(bufBytes))}
 	return append(header, bufBytes...), nil
@@ -371,11 +388,15 @@ func marshalOID(oid string) ([]byte, error) {
 }
 
 func oidToString(oid []int) (ret string) {
-	values := make([]interface{}, len(oid))
-	for i, v := range oid {
-		values[i] = v
+	oidAsString := make([]string, len(oid)+1)
+
+	// used for appending of the first dot
+	oidAsString[0] = ""
+	for i := range oid {
+		oidAsString[i+1] = strconv.Itoa(oid[i])
 	}
-	return fmt.Sprintf(strings.Repeat(".%d", len(oid)), values...)
+
+	return strings.Join(oidAsString, ".")
 }
 
 // parseBase128Int parses a base-128 encoded int from the given offset in the

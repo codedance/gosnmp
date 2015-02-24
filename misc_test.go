@@ -22,6 +22,9 @@ var testsMarshalLength = []struct {
 }{
 	{1, []byte{0x01}},
 	{129, []byte{0x81, 0x81}},
+	{256, []byte{0x82, 0x01, 0x00}},
+	{272, []byte{0x82, 0x01, 0x10}},
+	{435, []byte{0x82, 0x01, 0xb3}},
 }
 
 func TestMarshalLength(t *testing.T) {
@@ -42,8 +45,8 @@ func TestMarshalLength(t *testing.T) {
 var testsPartition = []struct {
 	currentPosition int
 	partitionSize   int
-	sliceLength      int
-	ok               bool
+	sliceLength     int
+	ok              bool
 }{
 	{-1, 3, 8, false}, // test out of range
 	{8, 3, 8, false},  // test out of range

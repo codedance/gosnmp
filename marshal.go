@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"sync/atomic"
 	"time"
 )
@@ -65,7 +66,8 @@ const (
 )
 
 const (
-	rxBufSize = 65536
+	rxBufSizeMin = 1024   // Minimal buffer size to handle 1 OID (see dispatch())
+	rxBufSizeMax = 131072 // Prevent memory allocation from going out of control
 )
 
 // Logger is an interface used for debugging. Both Print and
@@ -137,24 +139,14 @@ func (x *GoSNMP) send(pdus []SnmpPDU, packetOut *SnmpPacket) (result *SnmpPacket
 			err = fmt.Errorf("marshal: %v", err)
 			break
 		}
-		_, err = x.Conn.Write(outBuf)
+
+		var resp []byte
+		resp, err = dispatch(x.Conn, outBuf, len(pdus))
 		if err != nil {
-			err = fmt.Errorf("Error writing to socket: %s", err.Error())
 			continue
 		}
 
-		// FIXME: If our packet exceeds our buf size we'll get a partial read
-		// and this request, and the next will fail. The correct logic would be
-		// to realloc and read more if pack len > buff size.
-		resp := make([]byte, rxBufSize, rxBufSize)
-		var n int
-		n, err = x.Conn.Read(resp)
-		if err != nil {
-			err = fmt.Errorf("Error reading from UDP: %s", err.Error())
-			continue
-		}
-
-		result, err = unmarshal(resp[:n])
+		result, err = unmarshal(resp)
 		if err != nil {
 			err = fmt.Errorf("Unable to decode packet: %s", err.Error())
 			continue
@@ -301,23 +293,56 @@ func marshalVarbind(pdu *SnmpPDU) ([]byte, error) {
 
 	// Marshal the PDU type into the appropriate BER
 	switch pdu.Type {
+
 	case Null:
 		pduBuf.Write([]byte{byte(Sequence), byte(len(oid) + 4)})
 		pduBuf.Write([]byte{byte(ObjectIdentifier), byte(len(oid))})
 		pduBuf.Write(oid)
 		pduBuf.Write([]byte{Null, 0x00})
+
 	case Integer:
+		// TODO tests currently only cover positive integers
 		// Oid
 		tmpBuf.Write([]byte{byte(ObjectIdentifier), byte(len(oid))})
 		tmpBuf.Write(oid)
 		// Integer
-		intBytes := []byte{byte(pdu.Value.(int))}
+		var intBytes []byte
+		switch value := pdu.Value.(type) {
+		case byte:
+			intBytes = []byte{byte(pdu.Value.(int))}
+		case int:
+			intBytes = marshalInt16(value)
+		default:
+			return nil, fmt.Errorf("Unable to marshal PDU Integer; not byte or int.")
+		}
 		tmpBuf.Write([]byte{byte(Integer), byte(len(intBytes))})
 		tmpBuf.Write(intBytes)
 		// Sequence, length of oid + integer, then oid/integer data
 		pduBuf.WriteByte(byte(Sequence))
 		pduBuf.WriteByte(byte(len(oid) + len(intBytes) + 4))
 		pduBuf.Write(tmpBuf.Bytes())
+
+	case OctetString:
+		//Oid
+		tmpBuf.Write([]byte{byte(ObjectIdentifier), byte(len(oid))})
+		tmpBuf.Write(oid)
+		//OctetString
+		var octetStringBytes []byte
+		switch value := pdu.Value.(type) {
+		case []byte:
+			octetStringBytes = value
+		case string:
+			octetStringBytes = []byte(value)
+		default:
+			return nil, fmt.Errorf("Unable to marshal PDU OctetString; not []byte or String.")
+		}
+		tmpBuf.Write([]byte{byte(OctetString), byte(len(octetStringBytes))})
+		tmpBuf.Write(octetStringBytes)
+		// Sequence, length of oid + octetstring, then oid/octetstring data
+		pduBuf.WriteByte(byte(Sequence))
+		pduBuf.WriteByte(byte(len(oid) + len(octetStringBytes) + 4))
+		pduBuf.Write(tmpBuf.Bytes())
+
 	default:
 		return nil, fmt.Errorf("Unable to marshal PDU: unknown BER type %d", pdu.Type)
 	}
@@ -484,6 +509,11 @@ func unmarshalVBL(packet []byte, response *SnmpPacket,
 		slog.Printf("vblLength: %d", vblLength)
 	}
 
+	// check for an empty response
+	if vblLength == 2 && packet[1] == 0x00 {
+		return response, nil
+	}
+
 	// Loop & parse Varbinds
 	for cursor < vblLength {
 		dumpBytes1(packet[cursor:], fmt.Sprintf("\nSTARTING a varbind. Cursor %d", cursor), 32)
@@ -521,4 +551,39 @@ func unmarshalVBL(packet []byte, response *SnmpPacket,
 		response.Variables = append(response.Variables, SnmpPDU{oidStr, v.Type, v.Value})
 	}
 	return response, nil
+}
+
+// dispatch request on network, and read the results into a byte array
+//
+// Previously, resp was allocated rxBufSize (65536) bytes ie a fixed size for
+// all responses. To decrease memory usage, resp is dynamically sized, at the
+// cost of possible additional network round trips.
+func dispatch(c net.Conn, outBuf []byte, pduCount int) ([]byte, error) {
+	var resp []byte
+	for bufSize := rxBufSizeMin * pduCount; bufSize < rxBufSizeMax; bufSize *= 2 {
+		resp = make([]byte, bufSize)
+		_, err := c.Write(outBuf)
+		if err != nil {
+			return resp, fmt.Errorf("Error writing to socket: %s", err.Error())
+		}
+		n, err := c.Read(resp)
+		if err != nil {
+			return resp, fmt.Errorf("Error reading from UDP: %s", err.Error())
+		}
+
+		if n < bufSize {
+			// Memory usage optimization. Help the runtime to release as much memory as possible.
+			//
+			// See: http://blog.golang.org/go-slices-usage-and-internals, section: A possible "gotcha"
+			// ...As mentioned earlier, re-slicing a slice doesn't make a copy of the
+			// underlying array. The full array will be kept in memory until it is no
+			// longer referenced. Occasionally this can cause the program to hold all
+			// the data in memory when only a small piece of it is needed.
+			resp = resp[:n]
+			resp2 := make([]byte, len(resp))
+			copy(resp2, resp)
+			return resp2, nil
+		}
+	}
+	return resp, fmt.Errorf("Response bufSize exceeded rxBufSizeMax (%d)", rxBufSizeMax)
 }

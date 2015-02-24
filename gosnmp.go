@@ -131,10 +131,10 @@ func (x *GoSNMP) Connect() error {
 	if x.Logger == nil {
 		LoggingDisabled = true
 	}
-	Conn, err := net.DialTimeout("udp", fmt.Sprintf("%s:%d", x.Target, x.Port), x.Timeout)
-	if err == nil {
-		x.Conn = Conn
-	} else {
+	addr := net.JoinHostPort(x.Target, strconv.Itoa(int(x.Port)))
+	var err error
+	x.Conn, err = net.DialTimeout("udp", addr, x.Timeout)
+	if err != nil {
 		return fmt.Errorf("Error establishing connection to host: %s\n", err.Error())
 	}
 	if x.random == nil {
@@ -169,11 +169,8 @@ func (x *GoSNMP) Get(oids []string) (result *SnmpPacket, err error) {
 
 // Set sends an SNMP SET request
 func (x *GoSNMP) Set(pdus []SnmpPDU) (result *SnmpPacket, err error) {
-	if len(pdus) != 1 {
-		return nil, fmt.Errorf("gosnmp currently only supports SNMP SETs for one oid")
-	}
-	if pdus[0].Type != Integer {
-		return nil, fmt.Errorf("gosnmp currently only supports SNMP SETs for Integers")
+	if pdus[0].Type != Integer || pdus[0].Type != OctetString {
+		return nil, fmt.Errorf("ERR:gosnmp currently only supports SNMP SETs for Integers and OctetStrings")
 	}
 	// build up SnmpPacket
 	packetOut := &SnmpPacket{
